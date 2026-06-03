@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circuit Solver</title>
+    <!-- 1. Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. Load Chart.js for plotting results -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 3. Load Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- This is Eel's magic JS file. It MUST be loaded this way. -->
+    <script type="text/javascript" src="/eel.js"></script>
+    
+    <style>
+        /* Custom styles */
+        body, html {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrolling */
+        }
+        
+        /* Create the dot grid for the canvas */
+        #circuit-canvas {
+            background-color: #f8fafc; /* A light gray background */
+            background-image: 
+                radial-gradient(circle at 1px 1px, #cbd5e1 1px, transparent 0);
+            background-size: 15px 15px; /* Grid spacing */
+            cursor: crosshair;
+        }
+
+        /* Style for the 'active' tool */
+        .tool-btn.active {
+            background-color: #3b82f6; /* Blue-600 */
+            color: white;
+        }
+
+        /* A simple modal for the chart */
+        #chart-modal {
+            transition: opacity 0.2s ease-in-out;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col text-gray-300">
+
+    <!-- Top Toolbar -->
+    <header class="flex-shrink-0 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 py-2 h-14">
+        <!-- Left Side: Title & Tabs -->
+        <div class="flex items-center space-x-4">
+            <span class="text-lg font-semibold text-white">Circuit Solver</span>
+            <div class="flex items-center space-x-1">
+                <div class="text-sm bg-gray-700 text-white px-3 py-1 rounded-t-md">
+                    Circuit Solver
+                </div>
+                <button class="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Right Side: Action Buttons -->
+        <div class="flex items-center space-x-3">
+            <button class="px-3 py-1.5 text-sm flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 rounded-md">
+                <i class="fas fa-save text-gray-400"></i>
+                <span>Save</span>
+            </button>
+            <button id="run-button" class="px-4 py-1.5 text-sm flex items-center space-x-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md font-medium">
+                <i class="fas fa-play"></i>
+                <span>Run</span>
+            </button>
+            <button class="px-2 py-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md">
+                <i class="fas fa-download"></i>
+            </button>
+            <button class="px-2 py-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md">
+                <i class="fas fa-share-alt"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- Left Component Toolbar -->
+        <aside class="w-16 flex-shrink-0 bg-gray-800 border-r border-gray-700 p-2 flex flex-col items-center space-y-2">
+            <button class="tool-btn w-12 h-12 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-700 hover:text-white" data-tool="select" title="Select">
+                <i class="fas fa-mouse-pointer"></i>
+            </button>
+            <button class="tool-btn w-12 h-12 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-700 hover:text-white" data-tool="wire" title="Wire">
+                <i class="fas fa-minus"></i>
+            </button>
+            <button class="tool-btn w-12 h-12 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-700 hover:text-white" data-tool="resistor" title="Resistor">
+                <i class="fas fa-wave-square"></i>
+            </button>
+            <button class="tool-btn w-12 h-12 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-700 hover:text-white" data-tool="capacitor" title="Capacitor">
+                <i class="fas fa-grip-lines-vertical"></i>
+            </button>
+            <button class="tool-btn w-12 h-12 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-700 hover:text-white" data-tool="inductor" title="Inductor">
+                <i class="fas fa-scroll" style="transform: rotate(90deg);"></i>
+            </button>
+            <button class="tool-btn w-12 h-12 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-700 hover:text-white" data-tool="voltage" title="Voltage Source">
+                <i class="fas fa-circle-plus"></i>
+            </button>
+             <button class="tool-btn w-12 h-12 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-700 hover:text-white" data-tool="ground" title="Ground">
+                <i class="fas fa-bars" style="transform: rotate(90deg);"></i>
+            </button>
+            <div class="flex-grow"></div> <!-- Spacer -->
+            <button class="tool-btn w-12 h-12 flex items-center justify-center rounded-md text-gray-400 hover:bg-red-600 hover:text-white" data-tool="delete" title="Delete">
+                <i class="fas fa-trash"></i>
+            </button>
+        </aside>
+
+        <!-- Main Drawing Canvas -->
+        <main class="flex-1 bg-gray-100 relative overflow-hidden">
+            <canvas id="circuit-canvas"></canvas>
+            
+            <!-- Canvas Controls -->
+            <div class="absolute bottom-4 right-4 flex flex-col space-y-2">
+                <button class="w-8 h-8 rounded-md bg-white shadow-md text-gray-700 hover:bg-gray-50 flex items-center justify-center">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <button class="w-8 h-8 rounded-md bg-white shadow-md text-gray-700 hover:bg-gray-50 flex items-center justify-center">
+                    <i class="fas fa-minus"></i>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Status Bar -->
+    <footer class="flex-shrink-0 bg-gray-800 border-t border-gray-700 px-4 py-1 h-8 flex items-center text-xs">
+        <span>Simulation:</span>
+        <span id="status-text" class="ml-2 text-white">Idle</span>
+    </footer>
+
+    <!-- Results Modal (Hidden by default) -->
+    <div id="chart-modal" class="hidden absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-12">
+        <div class="bg-white rounded-lg shadow-xl w-full h-full max-w-4xl max-h-xl flex flex-col p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-gray-900">Simulation Results</h2>
+                <button id="close-chart-btn" class="text-gray-500 hover:text-gray-800">
+                    <i class="fas fa-times fa-lg"></i>
+                </button>
+            </div>
+            <div class="flex-1 relative">
+                <canvas id="results-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 4. Main Application JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // === STATE ===
+            let currentTool = 'select'; 
+            let components = []; 
+            let wires = [];      
+            let isDrawing = false;
+            let startX = 0, startY = 0;
+            let lastX = 0, lastY = 0;
+            let nextComponentId = 1;
+            const GRID_SIZE = 15;
+            let resultsChart; 
+
+            // === CANVAS SETUP ===
+            const canvas = document.getElementById('circuit-canvas');
+            const ctx = canvas.getContext('2d');
+            const main = canvas.parentElement;
+
+            function resizeCanvas() {
+                canvas.width = main.clientWidth;
+                canvas.height = main.clientHeight;
+                redrawCanvas();
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // === UTILITIES ===
+            function snapToGrid(val) {
+                return Math.round(val / GRID_SIZE) * GRID_SIZE;
+            }
+
+            function getMousePos(e) {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                };
+            }
+            
+            function updateStatus(text, color = 'text-white') {
+                const statusEl = document.getElementById('status-text');
+                statusEl.textContent = text;
+                statusEl.className = `ml-2 ${color}`;
+            }
+            
+            function drawLabel(id, value, x1, y1, x2, y2) {
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+                
+                if (!id.startsWith('W')) {
+                    const idText = `${id}`;
+                    const valueText = `${value}`;
+                    
+                    ctx.font = '12px Inter';
+                    ctx.fillStyle = '#1e293b'; 
+                    ctx.textAlign = 'center';
+                    
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText(idText, midX, midY - 10); 
+                    
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(valueText, midX, midY + 10); 
+                }
+            }
+            
+            // --- DRAWING FUNCTIONS ---
+            
+            function getOrientation(x1, y1, x2, y2) {
+                const dx = Math.abs(x2 - x1);
+                const dy = Math.abs(y2 - y1);
+                return (dx > dy) ? 'horizontal' : 'vertical';
+            }
+
+            function drawResistor(x1, y1, x2, y2) {
+                const len = Math.max(Math.abs(x2-x1), Math.abs(y2-y1));
+                const lead = 0.35; 
+                const body = 1 - 2 * lead;
+                const numZigzags = 4;
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                
+                if (getOrientation(x1, y1, x2, y2) === 'horizontal') {
+                    const sign = Math.sign(x2 - x1);
+                    const y = y1;
+                    const startBody = x1 + sign * len * lead;
+                    const endBody = x2 - sign * len * lead;
+                    const zigzagHeight = 8;
+                    
+                    ctx.lineTo(startBody, y);
+                    for (let i = 0; i < numZigzags; i++) {
+                        let zx = startBody + sign * (len * body / numZigzags) * (i + 0.5);
+                        let zy = y + (i % 2 === 0 ? -zigzagHeight : zigzagHeight);
+                        ctx.lineTo(zx, zy);
+                    }
+                    ctx.lineTo(endBody, y);
+                } else {
+                    const sign = Math.sign(y2 - y1);
+                    const x = x1;
+                    const startBody = y1 + sign * len * lead;
+                    const endBody = y2 - sign * len * lead;
+                    const zigzagWidth = 8;
+                    
+                    ctx.lineTo(x, startBody);
+                    for (let i = 0; i < numZigzags; i++) {
+                        let zx = x + (i % 2 === 0 ? -zigzagWidth : zigzagWidth);
+                        let zy = startBody + sign * (len * body / numZigzags) * (i + 0.5);
+                        ctx.lineTo(zx, zy);
+                    }
+                    ctx.lineTo(x, endBody);
+                }
+                
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = '#0f172a'; 
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            function drawCapacitor(x1, y1, x2, y2) {
+                const len = Math.max(Math.abs(x2-x1), Math.abs(y2-y1));
+                const lead = 0.4;
+                const plateSize = 10;
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                
+                if (getOrientation(x1, y1, x2, y2) === 'horizontal') {
+                    const sign = Math.sign(x2 - x1);
+                    const y = y1;
+                    const p1x = x1 + sign * len * lead;
+                    const p2x = x2 - sign * len * lead;
+                    
+                    ctx.lineTo(p1x, y); 
+                    ctx.moveTo(p1x, y - plateSize); 
+                    ctx.lineTo(p1x, y + plateSize);
+                    
+                    ctx.moveTo(p2x, y - plateSize); 
+                    ctx.lineTo(p2x, y + plateSize);
+                    
+                    ctx.moveTo(p2x, y); 
+                    ctx.lineTo(x2, y2);
+                } else {
+                    const sign = Math.sign(y2 - y1);
+                    const x = x1;
+                    const p1y = y1 + sign * len * lead;
+                    const p2y = y2 - sign * len * lead;
+                    
+                    ctx.lineTo(x, p1y); 
+                    ctx.moveTo(x - plateSize, p1y); 
+                    ctx.lineTo(x + plateSize, p1y);
+                    
+                    ctx.moveTo(x - plateSize, p2y); 
+                    ctx.lineTo(x + plateSize, p2y);
+                    
+                    ctx.moveTo(x, p2y); 
+                    ctx.lineTo(x2, y2);
+                }
+                
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            function drawInductor(x1, y1, x2, y2) {
+                const len = Math.max(Math.abs(x2-x1), Math.abs(y2-y1));
+                const lead = 0.25;
+                const body = 1 - 2 * lead;
+                const numBumps = 3;
+                const bumpRadius = 8;
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                
+                if (getOrientation(x1, y1, x2, y2) === 'horizontal') {
+                    const sign = Math.sign(x2 - x1);
+                    const y = y1;
+                    const startBody = x1 + sign * len * lead;
+                    const endBody = x2 - sign * len * lead;
+                    const bumpLen = (endBody - startBody) / numBumps;
+                    
+                    ctx.lineTo(startBody, y);
+                    for (let i = 0; i < numBumps; i++) {
+                        ctx.arc(startBody + sign * (bumpLen * (i + 0.5)), y, bumpRadius, Math.PI, 0);
+                    }
+                    ctx.lineTo(endBody, y);
+                } else {
+                    const sign = Math.sign(y2 - y1);
+                    const x = x1;
+                    const startBody = y1 + sign * len * lead;
+                    const endBody = y2 - sign * len * lead;
+                    const bumpLen = (endBody - startBody) / numBumps;
+
+                    ctx.lineTo(x, startBody);
+                    for (let i = 0; i < numBumps; i++) {
+                         ctx.arc(x, startBody + sign * (bumpLen * (i + 0.5)), bumpRadius, -Math.PI/2, Math.PI/2);
+                    }
+                    ctx.lineTo(x, endBody);
+                }
+                
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            function drawVoltageSource(x1, y1, x2, y2) {
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+                const radius = 10;
+                
+                ctx.beginPath();
+                
+                if (getOrientation(x1, y1, x2, y2) === 'horizontal') {
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(midX - radius, midY);
+                    ctx.moveTo(midX + radius, midY);
+                    ctx.lineTo(x2, y2);
+                } else {
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(midX, midY - radius);
+                    ctx.moveTo(midX, midY + radius);
+                    ctx.lineTo(x2, y2);
+                }
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(midX, midY, radius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                ctx.font = 'bold 12px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#0f172a';
+                ctx.fillText('+', midX, midY - radius - 5);
+                ctx.fillText('-', midX, midY + radius + 12);
+
+            }
+            
+            function drawGround(x, y) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + 15);
+                ctx.moveTo(x - 10, y + 15);
+                ctx.lineTo(x + 10, y + 15);
+                ctx.moveTo(x - 6, y + 20);
+                ctx.lineTo(x + 6, y + 20);
+                ctx.moveTo(x - 3, y + 25);
+                ctx.lineTo(x + 3, y + 25);
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            function drawWire(x1, y1, x2, y2) {
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = '#3b82f6'; // blue-500
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            function redrawCanvas() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                components.forEach(comp => {
+                    if (comp.type === 'resistor') {
+                        drawResistor(comp.x1, comp.y1, comp.x2, comp.y2);
+                    } else if (comp.type === 'capacitor') {
+                        drawCapacitor(comp.x1, comp.y1, comp.x2, comp.y2);
+                    } else if (comp.type === 'inductor') {
+                        drawInductor(comp.x1, comp.y1, comp.x2, comp.y2);
+                    } else if (comp.type === 'voltage') {
+                        drawVoltageSource(comp.x1, comp.y1, comp.x2, comp.y2);
+                    } else if (comp.type === 'ground') {
+                        drawGround(comp.x1, comp.y1);
+                    }
+                    
+                    if (comp.type !== 'ground') {
+                        drawLabel(comp.id, comp.value, comp.x1, comp.y1, comp.x2, comp.y2);
+                    }
+                });
+
+                wires.forEach(wire => {
+                    drawWire(wire.x1, wire.y1, wire.x2, wire.y2);
+                });
+
+                const drawingTools = ['wire', 'resistor', 'capacitor', 'inductor', 'voltage'];
+                if (isDrawing && drawingTools.includes(currentTool)) {
+                    const dx = Math.abs(lastX - startX);
+                    const dy = Math.abs(lastY - startY);
+                    let endX = lastX, endY = lastY;
+                    
+                    if (dx > dy) { endY = startY; } 
+                    else { endX = startX; } 
+
+                    ctx.beginPath();
+                    ctx.setLineDash([5, 5]); 
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#94a3b8'; 
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.setLineDash([]); 
+                }
+            }
+
+            // === EVENT LISTENERS ===
+            
+            const toolButtons = document.querySelectorAll('.tool-btn');
+            toolButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    toolButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentTool = btn.dataset.tool;
+                    updateStatus(`Tool selected: ${currentTool}`);
+                });
+            });
+
+            canvas.addEventListener('mousedown', (e) => {
+                const pos = getMousePos(e);
+                startX = snapToGrid(pos.x);
+                startY = snapToGrid(pos.y);
+                lastX = startX;
+                lastY = startY;
+
+                const drawingTools = ['wire', 'resistor', 'capacitor', 'inductor', 'voltage'];
+                if (drawingTools.includes(currentTool)) {
+                    isDrawing = true;
+                } else if (currentTool === 'ground') {
+                     components.push({
+                        id: `G${nextComponentId++}`,
+                        type: 'ground',
+                        x1: startX,
+                        y1: startY,
+                        value: 0 
+                    });
+                    redrawCanvas();
+                }
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!isDrawing) return;
+                const pos = getMousePos(e);
+                lastX = snapToGrid(pos.x);
+                lastY = snapToGrid(pos.y);
+                redrawCanvas(); 
+            });
+
+            canvas.addEventListener('mouseup', (e) => {
+                if (!isDrawing) return;
+                isDrawing = false;
+                
+                const pos = getMousePos(e);
+                let endX = snapToGrid(pos.x);
+                let endY = snapToGrid(pos.y);
+                
+                const dx = Math.abs(endX - startX);
+                const dy = Math.abs(endY - startY);
+                if (dx > dy) { endY = startY; } 
+                else { endX = startX; } 
+
+                if (startX === endX && startY === endY) {
+                    redrawCanvas(); 
+                    return;
+                }
+
+                let value;
+                
+                if (currentTool === 'wire') {
+                    const id = `W${nextComponentId++}`;
+                    wires.push({ id, x1: startX, y1: startY, x2: endX, y2: endY });
+                } else if (currentTool === 'resistor') {
+                    value = prompt("Enter resistance (e.g., 1k):", "1k");
+                    if (value) {
+                        components.push({ id: `R${nextComponentId++}`, type: 'resistor', x1: startX, y1: startY, x2: endX, y2: endY, value });
+                    }
+                } else if (currentTool === 'capacitor') {
+                    value = prompt("Enter capacitance (e.g., 1u):", "1u");
+                    if (value) {
+                        components.push({ id: `C${nextComponentId++}`, type: 'capacitor', x1: startX, y1: startY, x2: endX, y2: endY, value });
+                    }
+                } else if (currentTool === 'inductor') {
+                    value = prompt("Enter inductance (e.g., 10m):", "10m");
+                    if (value) {
+                        components.push({ id: `L${nextComponentId++}`, type: 'inductor', x1: startX, y1: startY, x2: endX, y2: endY, value });
+                    }
+                } else if (currentTool === 'voltage') {
+                    value = prompt("Enter voltage (e.g., 5V or SIN(0 1 1k)):", "5V");
+                    if (value) {
+                        if (endY < startY) {
+                            let tempY = startY;
+                            startY = endY;
+                            endY = tempY;
+                        }
+                        components.push({ id: `V${nextComponentId++}`, type: 'voltage', x1: startX, y1: startY, x2: endX, y2: endY, value });
+                    }
+                }
+                
+                redrawCanvas();
+            });
+
+            // === NETLIST GENERATION ===
+            function generateNetlist() {
+                let netlist = "* Circuit Solver Netlist\n";
+                let allPoints = {};
+                
+                function addPoint(x, y) {
+                    const key = `${x},${y}`;
+                    if (!allPoints[key]) {
+                        allPoints[key] = { x, y, net: null, connections: [] };
+                    }
+                    return allPoints[key];
+                }
+
+                // 1. Add all component and wire endpoints to allPoints
+                components.forEach(c => {
+                    addPoint(c.x1, c.y1);
+                    if (c.type !== 'ground') {
+                        addPoint(c.x2, c.y2);
+                    }
+                });
+                wires.forEach(w => {
+                    addPoint(w.x1, w.y1);
+                    addPoint(w.x2, w.y2);
+                });
+
+                // 2. Build the connection graph from wires
+                wires.forEach(w => {
+                    let p1 = allPoints[`${w.x1},${w.y1}`];
+                    let p2 = allPoints[`${w.x2},${w.y2}`];
+                    p1.connections.push(p2);
+                    p2.connections.push(p1);
+                });
+
+                let netCounter = 1;
+                let groundQueue = [];
+
+                // 3. Find all explicit ground points and add them to a queue
+                Object.values(allPoints).forEach(point => {
+                    const isGround = components.some(c => c.type === 'ground' && c.x1 === point.x && c.y1 === point.y);
+                    if (isGround) {
+                        point.net = "0";
+                        groundQueue.push(point);
+                    }
+                });
+                
+                // 4. Flood-fill the "0" net from all ground points
+                while (groundQueue.length > 0) {
+                    let point = groundQueue.shift();
+                    point.connections.forEach(neighbor => {
+                        if (neighbor.net === null) {
+                            neighbor.net = "0";
+                            groundQueue.push(neighbor);
+                        }
+                    });
+                }
+
+                // 5. Flood-fill all other nets
+                Object.values(allPoints).forEach(startPoint => {
+                    if (startPoint.net !== null) return; // Already processed (e.g., ground)
+
+                    const currentNet = `${netCounter++}`;
+                    let queue = [startPoint];
+                    startPoint.net = currentNet;
+
+                    while (queue.length > 0) {
+                        let point = queue.shift();
+                        point.connections.forEach(neighbor => {
+                            if (neighbor.net === null) {
+                                neighbor.net = currentNet;
+                                queue.push(neighbor);
+                            }
+                        });
+                    }
+                });
+                
+                // 6. Build the netlist string from components
+                let hasFloatingPins = false;
+                components.forEach(comp => {
+                    if (comp.type !== 'ground') {
+                        const node1 = allPoints[`${comp.x1},${comp.y1}`].net;
+                        const node2 = allPoints[`${comp.x2},${comp.y2}`].net;
+                        
+                        if (node1 === null || node2 === null) {
+                            console.error(`Component ${comp.id} has a floating pin!`);
+                            updateStatus(`Error: Component ${comp.id} has a floating pin!`, 'text-red-400');
+                            hasFloatingPins = true;
+                            return; 
+                        }
+                        
+                        netlist += `${comp.id} ${node1} ${node2} ${comp.value}\n`;
+                    }
+                });
+                
+                if (hasFloatingPins) return null; // Abort if floating pins
+                
+                console.log(netlist); 
+                return netlist;
+            }
+
+            // === RUN BUTTON ===
+            const runButton = document.getElementById('run-button');
+            runButton.addEventListener('click', async () => {
+                updateStatus('Generating netlist...', 'text-yellow-300');
+                const netlist = generateNetlist();
+                
+                if (!netlist) {
+                    // Status already updated by netlister if there was an error
+                    return;
+                }
+                
+                updateStatus('Simulating... (Calling Python)', 'text-blue-300');
+                runButton.disabled = true;
+                runButton.classList.add('opacity-50', 'cursor-not-allowed');
+
+                try {
+                    // Call the exposed Python function
+                    const results = await eel.solve_circuit(netlist)();
+                    
+                    // Check if Python returned an error object
+                    if (results.error) {
+                        throw new Error(results.error);
+                    }
+
+                    updateStatus('Simulation Complete. Plotting...', 'text-green-400');
+                    console.log('Received results from Python:', results);
+                    
+                    // Plot results
+                    plotResults(results);
+
+                } catch (error) { 
+                    console.error('Simulation error:', error);
+                    updateStatus(`Error: ${error.message || error.errorText || 'Unknown error'}`, 'text-red-4M00');
+                } finally {
+                    runButton.disabled = false;
+                    runButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            });
+
+            // === PLOTTING (UPDATED) ===
+            const chartModal = document.getElementById('chart-modal');
+            const closeChartBtn = document.getElementById('close-chart-btn');
+            
+            function plotResults(data) {
+                const chartCanvas = document.getElementById('results-chart').getContext('2d');
+                
+                if (resultsChart) {
+                    resultsChart.destroy(); 
+                }
+
+                // --- NEW PLOT OPTIONS ---
+                // We will add the 'pointRadius' and 'tension' properties
+                // to the datasets that are coming from Python.
+                const finalDatasets = data.datasets.map(dataset => {
+                    return {
+                        ...dataset,
+                        tension: 0,      // Makes lines perfectly straight
+                        pointRadius: 0,  // Hides the dots
+                    };
+                });
+                // --- END NEW PLOT OPTIONS ---
+
+                
+                resultsChart = new Chart(chartCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: finalDatasets // Use our modified datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false, // Turn off animation for faster rendering
+                        scales: {
+                            x: { title: { display: true, text: 'Time (s)', color: '#111' }, ticks: { color: '#333' } },
+                            y: { title: { display: true, text: 'Voltage (V)', color: '#111' }, ticks: { color: '#333' } }
+                        },
+                        plugins: {
+                            legend: { labels: { color: '#111' } }
+                        }
+                    }
+                });
+                
+                chartModal.classList.remove('hidden');
+            }
+
+            closeChartBtn.addEventListener('click', () => {
+                chartModal.classList.add('hidden');
+            });
+
+            // Set select tool as active by default
+            document.querySelector('.tool-btn[data-tool="select"]').classList.add('active');
+            currentTool = 'select';
+        });
+    </script>
+</body>
+</html>
